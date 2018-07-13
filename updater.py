@@ -52,30 +52,48 @@ class rangercon(object):
             return(False)
         return(policyid)
 
+    def access(self, readonly):
+        if readonly is True:
+            accesses = [{"type":"hdfs:read","isAllowed":True},
+            {"type":"hdfs:execute","isAllowed":True},{"type":"hbase:read","isAllowed":True},
+            {"type":"hive:select","isAllowed":True},{"type":"hive:read","isAllowed":True},
+            {"type":"kafka:consume","isAllowed":True},{"type":"kafka:describe","isAllowed":True}]
+        else:
+            accesses = [{"type":"hdfs:read","isAllowed":True},{"type":"hdfs:write","isAllowed":True},{"type":"hdfs:execute","isAllowed":True},
+            {"type":"hbase:read","isAllowed":True},{"type":"hbase:write","isAllowed":True},{"type":"hive:select","isAllowed":True},
+            {"type":"hive:update","isAllowed":True},{"type":"hive:create","isAllowed":True},{"type":"hive:drop","isAllowed":True},
+            {"type":"hive:alter","isAllowed":True},{"type":"hive:index","isAllowed":True},{"type":"hive:lock","isAllowed":True},{
+            "type":"hive:all","isAllowed":True},{"type":"kafka:publish","isAllowed":True},{"type":"kafka:consume","isAllowed":True},
+            {"type":"kafka:describe","isAllowed":True}]
+        return(accesses)
+
+    def policyitems(self, tag, groups):
+        policyitems = []
+        for group in groups:
+            policyitems.append({'groups':[group['group']], "delegateAdmin": False, 'accesses': self.access(group['readonly'])})
+        return(policyitems)
+
     def createpolicy(self, tag, groups):
         if not groups:
             return(True)
-        data = {"policyType":"0","name": tag,"isEnabled":True,"isAuditEnabled":True,"description":"",
-        "resources":{"tag":{"values":[tag],"isRecursive":False,"isExcludes":False}},
-        "policyItems":[{"groups":groups,"accesses":[{"type":"hdfs:read","isAllowed":True},
-        {"type":"hdfs:execute","isAllowed":True},{"type":"hbase:read","isAllowed":True},
-        {"type":"hive:select","isAllowed":True},{"type":"hive:read","isAllowed":True},
-        {"type":"kafka:consume","isAllowed":True},{"type":"kafka:describe","isAllowed":True}]}],
+        policies = self.policyitems(tag, groups)
+        data = {"policyType":"0","name":tag,"isEnabled":True,"isAuditEnabled":True,"description":"","resources":
+        {"tag":{"values":[tag],"isRecursive":False,"isExcludes":False}},"policyItems": policies,
         "denyPolicyItems":[],"allowExceptions":[],"denyExceptions":[],"service":self.reponame}
         self.rest('service/plugins/policies', method='post', data=json.dumps(data))
 
-    def updatepolicy(self, policyid, groups):
+    def updatepolicy(self, policyid, groups, tag):
         if not groups:
             self.rest('service/plugins/policies/' + str(policyid), method='delete', formatjson=False)
         else:
             policyinfo = self.rest('service/plugins/policies/' + str(policyid))
-            policyinfo['policyItems'][0]['groups'] = groups
+            policyinfo['policyItems'] = self.policyitems(tag, groups)
             self.rest('service/plugins/policies/' + str(policyid), method='put', data=json.dumps(policyinfo))
 
     def policies(self, tag, groups):
         tagid = self.policyexits(tag)
         if tagid != False:
-            self.updatepolicy(tagid, groups)
+            self.updatepolicy(tagid, groups, tag)
         else:
             self.createpolicy(tag, groups)
 
@@ -130,6 +148,18 @@ class atlascon(object):
                 guid = self.rest('entities?type=UserGroups&property=qualifiedName&value=' + group)['definition']['id']['id']
                 self.rest('entities?guid=' + guid, method='delete')
 
+    def readonly(self, response, tag, group):
+        classification = [v['classifications'][0] for v in response if v['displayText'] == group ]
+        try:
+            attributes = [v['attributes'] for v in classification if v['typeName'] == tag ]
+        except:
+            return(True)
+        try:
+            readonly = attributes[0]['readonly']
+        except:
+            readonly = True
+        return(readonly)
+
     def listoftags(self):
         tags = [v for v in self.rest('types?type=TRAIT')['results'] if v != 'TaxonomyTerm']
         return(tags)
@@ -143,7 +173,10 @@ class atlascon(object):
             groups = [v['attributes']['Name'] for v in response['entities']]
         else:
             groups = []
-        return(groups)
+        list = []
+        for group in groups:
+            list.append({"group": group, "readonly": self.readonly(response['entities'], tag, group)})
+        return(list)
 
 def sync():
     ranger = rangercon(rangerurl, username, password)
