@@ -87,8 +87,10 @@ class rangercon(object):
             self.rest('service/plugins/policies/' + str(policyid), method='delete', formatjson=False)
         else:
             policyinfo = self.rest('service/plugins/policies/' + str(policyid))
+            existinginfo = policyinfo
             policyinfo['policyItems'] = self.policyitems(tag, groups)
-            self.rest('service/plugins/policies/' + str(policyid), method='put', data=json.dumps(policyinfo))
+            if policyinfo != existinginfo:
+                self.rest('service/plugins/policies/' + str(policyid), method='put', data=json.dumps(policyinfo))
 
     def policies(self, tag, groups):
         tagid = self.policyexits(tag)
