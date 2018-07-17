@@ -4,6 +4,7 @@ import sys
 import json
 import requests
 import optparse
+import logging
 import time
 from urlparse import urlparse
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -18,7 +19,6 @@ class rangercon(object):
         self.port = parsed.netloc.split(':')[1]
         self.username = username
         self.password = password
-        self.repoexists()
 
     def rest(self, endpoint, data=None, method='get', formatjson=True, params=None):
         url = self.protocol + "://" + self.host + ":" + str(self.port) + "/" + endpoint
@@ -26,8 +26,8 @@ class rangercon(object):
         try:
             r = requests.request(method, url, headers=header, auth=(self.username, self.password), verify=False, data=data, params=params)
         except:
-            print("Cannot connect to Ranger")
-            sys.exit(1)
+            logger.error('Cannot connect to Ranger')
+            return(False)
         if formatjson:
             return(json.loads(r.text))
         else:
@@ -41,8 +41,8 @@ class rangercon(object):
         try:
             self.repoid = [v for v in self.rest('service/plugins/services')['services'] if v['type'] == 'tag'][0]['id']
         except:
-            print("\n Ranger Atlas integration is not enabled")
-            sys.exit(1)
+            logger.error("Ranger Atlas integration is not enabled")
+            return(False)
         self.reponame = [v for v in self.rest('service/plugins/services')['services'] if v['type'] == 'tag'][0]['name']
 
     def policyexits(self, tag):
@@ -70,7 +70,7 @@ class rangercon(object):
     def policyitems(self, tag, groups):
         policyitems = []
         for group in groups:
-            policyitems.append({'groups':[group['group']], "delegateAdmin": False, 'accesses': self.access(group['readonly'])})
+            policyitems.append({'groups':[group['group']], "conditions": [], "users": [], "delegateAdmin": False, 'accesses': self.access(group['readonly'])})
         return(policyitems)
 
     def createpolicy(self, tag, groups):
@@ -81,16 +81,19 @@ class rangercon(object):
         {"tag":{"values":[tag],"isRecursive":False,"isExcludes":False}},"policyItems": policies,
         "denyPolicyItems":[],"allowExceptions":[],"denyExceptions":[],"service":self.reponame}
         self.rest('service/plugins/policies', method='post', data=json.dumps(data))
+        logger.info('Creating policy for tag %s' % (tag))
 
     def updatepolicy(self, policyid, groups, tag):
         if not groups:
             self.rest('service/plugins/policies/' + str(policyid), method='delete', formatjson=False)
+            logger.info('Deleted policy for tag %s since it has no groups' % (tag))
         else:
             policyinfo = self.rest('service/plugins/policies/' + str(policyid))
-            existinginfo = policyinfo
-            policyinfo['policyItems'] = self.policyitems(tag, groups)
-            if policyinfo != existinginfo:
+            newitems = self.policyitems(tag, groups)
+            if cmp(newitems, policyinfo['policyItems']):
+                policyinfo['policyItems'] = newitems
                 self.rest('service/plugins/policies/' + str(policyid), method='put', data=json.dumps(policyinfo))
+                logger.info('Updating policy for tag %s' % (tag))
 
     def policies(self, tag, groups):
         tagid = self.policyexits(tag)
@@ -115,8 +118,8 @@ class atlascon(object):
         try:
             r = requests.request(method, url, headers=header, auth=(self.username, self.password), verify=False, data=data, params=params)
         except:
-            print("Cannot connect to Atlas")
-            sys.exit(1)
+            logger.error("Cannot connect to Atlas")
+            return(False)
         if formatjson:
             return(json.loads(r.text))
         else:
@@ -130,6 +133,7 @@ class atlascon(object):
              "name": "Name", "dataTypeName": "string", "multiplicity": "required", "isComposite": False,
              "isUnique": True, "isIndexable": True, "reverseAttributeName": None }] }] }
             self.rest('types', method='post', data=json.dumps(data))
+            logger.info('Created UserGroups type in Atlas')
 
     def syncgroups(self, groups):
         data = {"excludeDeletedEntities":True,"includeSubClassifications":True,"includeSubTypes":True,"entityFilters":None,"tagFilters":None,
@@ -144,11 +148,13 @@ class atlascon(object):
                  "jsonClass": "org.apache.atlas.typesystem.json.InstanceSerialization$_Id", "version": 0,
                  "typeName": "UserGroups" }, "typeName": "UserGroups", "values": { "Name": group, "name": group, "qualifiedName": group },"traitNames": [], "traits": {} }
                 self.rest('entities', method='post', data=json.dumps(data))
+                logger.info('Group %s has been created' % (group))
         deletedgroups = list(set(listofgroups) - set(groups))
         if deletedgroups:
             for group in deletedgroups:
                 guid = self.rest('entities?type=UserGroups&property=qualifiedName&value=' + group)['definition']['id']['id']
                 self.rest('entities?guid=' + guid, method='delete')
+                logger.info('Group %s has been deleted' % (group))
 
     def readonly(self, response, tag, group):
         classification = [v['classifications'][0] for v in response if v['displayText'] == group ]
@@ -182,7 +188,11 @@ class atlascon(object):
 
 def sync():
     ranger = rangercon(rangerurl, username, password)
+    if ranger.repoexists() is False:
+        return(False)
     atlas = atlascon(atlasurl, username, password)
+    if atlas.rest('admin/status') is False:
+        return(False)
     rangergroups = ranger.listgroups()
     atlas.syncgroups(rangergroups)
     for tag in atlas.listoftags():
@@ -197,6 +207,7 @@ def main():
     parser.add_option("-u", "--username", dest="username", default="admin", help="Username to connect to Ranger and Atlas")
     parser.add_option("-p", "--password", dest="password", default="admin", help="Password to connect to Ranger and Atlas")
     parser.add_option("-i", "--interval", dest="interval", default=60, help="Sync Interval")
+    parser.add_option("-l", "--log-file", dest="logfile", default="./atlasync.log", help="Log file location")
     (options, args) = parser.parse_args()
     global password
     global username
@@ -206,9 +217,20 @@ def main():
     password = options.password
     rangerurl = options.rangerurl
     atlasurl = options.atlasurl
-    while True:
+    logfile = options.logfile
+    global logger
+    logger = logging.getLogger('usersync')
+    hdlr = logging.FileHandler(logfile)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    hdlr.setFormatter(formatter)
+    logger.addHandler(hdlr)
+    logger.setLevel(logging.INFO)
+    logger.info('Starting Sync Daemon')
+    while 1 == 1:
+        logger.info('Starting sync session')
         sync()
         time.sleep(int(options.interval))
+        logger.info('Finished sync session')
 
 if __name__ == "__main__":
     try:
