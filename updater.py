@@ -37,13 +37,10 @@ class rangercon(object):
     def listgroups(self):
         listofgroups = []
         initial = self.rest('service/xusers/groups')
-        pages = int(math.ceil(initial['totalCount']/200))
-        if pages == 0:
-            listofgroups.extend([v['name'] for v in self.rest('service/xusers/groups')['vXGroups']])
-        else:
-            for i in range(pages):
-                groups = [v['name'] for v in self.rest('service/xusers/groups?page=%s' % (i*200))['vXGroups']]
-                listofgroups.extend(groups)
+        pages = int(math.ceil(initial['totalCount']/200.))
+        for i in range(pages):
+            groups = [v['name'] for v in self.rest('service/xusers/groups?startIndex=%s' % (i*200))['vXGroups']]
+            listofgroups.extend(groups)
         return(listofgroups)
 
     def repoexists(self):
@@ -146,11 +143,14 @@ class atlascon(object):
 
     def syncgroups(self, groups):
         data = {"excludeDeletedEntities":True,"includeSubClassifications":True,"includeSubTypes":True,"entityFilters":None,"tagFilters":None,
-               "attributes":["qualifiedName"],"limit":25,"offset":0,"typeName":"UserGroups","classification":None}
-        if 'entities' in self.rest('v2/search/basic', method='post', data= json.dumps(data)):
-            listofgroups = [v['attributes']['Name'] for v in self.rest('v2/search/basic', method='post', data= json.dumps(data))['entities']]
-        else:
-            listofgroups = []
+               "attributes":["qualifiedName"], "limit": 100, "offset":0,"typeName":"UserGroups","classification":None}
+        count = self.rest('entities?type=UserGroups')['count']
+        listofgroups = []
+        if count != 0:
+            pages = int(math.ceil(float(count/100.)))
+            for i in range(pages):
+                data['offset'] = i*100
+                listofgroups.extend([v['attributes']['Name'] for v in self.rest('v2/search/basic', method='post', data= json.dumps(data))['entities']])
         for group in groups:
             if group not in listofgroups:
                 data = { "jsonClass": "org.apache.atlas.typesystem.json.InstanceSerialization$_Reference", "id": {
