@@ -6,6 +6,7 @@ import requests
 import optparse
 import logging
 import time
+import math
 from urlparse import urlparse
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -34,7 +35,16 @@ class rangercon(object):
             return(r.text)
 
     def listgroups(self):
-        listofgroups = [v['name'] for v in self.rest('service/xusers/groups?pageSize=100')['vXGroups'] if 'add from Unix box' not in v['description']]
+        listofgroups = []
+        initial = self.rest('service/xusers/groups')
+        pages = int(math.ceil(initial['totalCount']/200))
+        if pages == 0:
+            listofgroups.extend([v['name'] for v in self.rest('service/xusers/groups')['vXGroups']])
+        else:
+            for i in range(pages):
+                groups = [v['name'] for v in self.rest('service/xusers/groups?page=%s' % (i*200))['vXGroups']]
+                print(groups)
+                listofgroups.extend(groups)
         return(listofgroups)
 
     def repoexists(self):
