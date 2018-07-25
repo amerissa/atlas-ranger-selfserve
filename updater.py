@@ -13,19 +13,24 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class rangercon(object):
-    def __init__(self, url, username, password):
+    def __init__(self, url, username, password, kerberos=False):
         parsed = urlparse(url)
         self.protocol = parsed.scheme
         self.host = parsed.netloc.split(':')[0]
         self.port = parsed.netloc.split(':')[1]
         self.username = username
         self.password = password
+        self.kerberos = kerberos
 
     def rest(self, endpoint, data=None, method='get', formatjson=True, params=None):
         url = self.protocol + "://" + self.host + ":" + str(self.port) + "/" + endpoint
         header = {"Accept": "application/json", "Content-Type": "application/json"}
+        if kerberos == True:
+            auth = HTTPKerberosAuth()
+        else:
+            auth = (self.username, self.password)
         try:
-            r = requests.request(method, url, headers=header, auth=(self.username, self.password), verify=False, data=data, params=params)
+            r = requests.request(method, url, headers=header, auth=auth, verify=False, data=data, params=params)
         except:
             logger.error('Cannot connect to Ranger')
             return(False)
@@ -109,20 +114,25 @@ class rangercon(object):
             self.createpolicy(tag, groups)
 
 class atlascon(object):
-    def __init__(self, url, username, password):
+    def __init__(self, url, username, password, kerberos=False):
         parsed = urlparse(url)
         self.protocol = parsed.scheme
         self.host = parsed.netloc.split(':')[0]
         self.port = parsed.netloc.split(':')[1]
         self.username = username
         self.password = password
+        self.kerberos = kerberos
         self.createentity()
 
     def rest(self, endpoint, data=None, method='get', formatjson=True, params=None):
         url = self.protocol + "://" + self.host + ":" + str(self.port) + "/api/atlas/" + endpoint
         header = {"Accept": "application/json", "Content-Type": "application/json"}
+        if kerberos == True:
+            auth = HTTPKerberosAuth()
+        else:
+            auth = (self.username, self.password)
         try:
-            r = requests.request(method, url, headers=header, auth=(self.username, self.password), verify=False, data=data, params=params)
+            r = requests.request(method, url, headers=header, auth=auth, verify=False, data=data, params=params)
         except:
             logger.error("Cannot connect to Atlas")
             return(False)
@@ -196,10 +206,10 @@ class atlascon(object):
         return(list)
 
 def sync():
-    ranger = rangercon(rangerurl, username, password)
+    ranger = rangercon(rangerurl, username, password, kerberos)
     if ranger.repoexists() is False:
         return(False)
-    atlas = atlascon(atlasurl, username, password)
+    atlas = atlascon(atlasurl, username, password, kerberos)
     if atlas.rest('admin/status') is False:
         return(False)
     rangergroups = ranger.listgroups()
@@ -217,16 +227,21 @@ def main():
     parser.add_option("-p", "--password", dest="password", default="admin", help="Password to connect to Ranger and Atlas")
     parser.add_option("-i", "--interval", dest="interval", default=60, help="Sync Interval")
     parser.add_option("-l", "--log-file", dest="logfile", default="./atlasync.log", help="Log file location")
+    parser.add_option("-k", "--kerberos", action="store_true", dest="kerberos", default=False, help="Use kerberos auth" )
     (options, args) = parser.parse_args()
     global password
     global username
     global atlasurl
     global rangerurl
+    global kerberos
     username = options.username
     password = options.password
     rangerurl = options.rangerurl
     atlasurl = options.atlasurl
     logfile = options.logfile
+    kerberos = options.kerberos
+    if kerberos == True:
+        from requests_kerberos import HTTPKerberosAuth
     global logger
     logger = logging.getLogger('usersync')
     hdlr = logging.FileHandler(logfile)
