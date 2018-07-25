@@ -36,13 +36,13 @@ class rangercon(object):
 
     def listgroups(self):
         listofgroups = []
-        initial = self.rest('service/xusers/groups?pageSize=1')
-        pages = int(math.ceil(initial['totalCount']/1))
+        initial = self.rest('service/xusers/groups')
+        pages = int(math.ceil(initial['totalCount']/200))
         if pages == 0:
             listofgroups.extend([v['name'] for v in self.rest('service/xusers/groups')['vXGroups']])
         else:
             for i in range(pages):
-                groups = [v['name'] for v in self.rest('service/xusers/groups?page=%s' % (i*1))['vXGroups']]
+                groups = [v['name'] for v in self.rest('service/xusers/groups?page=%s' % (i*200))['vXGroups']]
                 listofgroups.extend(groups)
         return(listofgroups)
 
