@@ -206,10 +206,10 @@ class atlascon(object):
         return(list)
 
 def sync():
-    ranger = rangercon(rangerurl, username, password, kerberos)
+    ranger = rangercon(rangerurl, rangerusername, rangerpassword, kerberos)
     if ranger.repoexists() is False:
         return(False)
-    atlas = atlascon(atlasurl, username, password, kerberos)
+    atlas = atlascon(atlasurl, atlasusername, atlaspassword, kerberos)
     if atlas.rest('admin/status') is False:
         return(False)
     rangergroups = ranger.listgroups()
@@ -223,19 +223,25 @@ def main():
     parser = optparse.OptionParser(usage="usage: %prog [options]")
     parser.add_option("-r", "--rangerurl", dest="rangerurl", default="http://localhost:6080", help="Ranger URL")
     parser.add_option("-a", "--atlasurl", dest="atlasurl", default="http://localhost:21000", help="Atlas URL")
-    parser.add_option("-u", "--username", dest="username", default="admin", help="Username to connect to Ranger and Atlas")
-    parser.add_option("-p", "--password", dest="password", default="admin", help="Password to connect to Ranger and Atlas")
+    parser.add_option("-u", "--username-ranger", dest="rangerusername", default="admin", help="Username to connect to Ranger")
+    parser.add_option("-p", "--password-ranger", dest="rangerpassword", default="admin", help="Password to connect to Ranger")
+    parser.add_option("-g", "--username-atlas", dest="atlasusername", default="admin", help="Username to connect to Atlas")
+    parser.add_option("-t", "--password-atlas", dest="atlaspassword", default="admin", help="Password to connect to Atlas")
     parser.add_option("-i", "--interval", dest="interval", default=60, help="Sync Interval")
     parser.add_option("-l", "--log-file", dest="logfile", default="./atlasync.log", help="Log file location")
-    parser.add_option("-k", "--kerberos", action="store_true", dest="kerberos", default=False, help="Use kerberos auth" )
+    parser.add_option("-k", "--kerberos", action="store_true", dest="kerberos", default=False, help="Use kerberos auth")
     (options, args) = parser.parse_args()
-    global password
-    global username
+    global rangerpassword
+    global rangerusername
+    global atlaspassword
+    global atlasusername
     global atlasurl
     global rangerurl
     global kerberos
-    username = options.username
-    password = options.password
+    rangerusername = options.rangerusername
+    rangerpassword = options.rangerpassword
+    atlasusername = options.atlasusername
+    atlaspassword = options.atlaspassword
     rangerurl = options.rangerurl
     atlasurl = options.atlasurl
     logfile = options.logfile
@@ -255,6 +261,7 @@ def main():
         sync()
         time.sleep(int(options.interval))
         logger.info('Finished sync session')
+
 
 if __name__ == "__main__":
     try:
