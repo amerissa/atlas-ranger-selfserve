@@ -64,7 +64,7 @@ class rangercon(object):
         return(policyid)
 
     def access(self, readonly):
-        if readonly is True:
+        if readonly is not False:
             accesses = [{"type":"hdfs:read","isAllowed":True},
             {"type":"hdfs:execute","isAllowed":True},{"type":"hbase:read","isAllowed":True},
             {"type":"hive:select","isAllowed":True},{"type":"hive:read","isAllowed":True},
