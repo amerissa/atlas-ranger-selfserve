@@ -159,7 +159,7 @@ class atlascon(object):
             pages = int(math.ceil(float(count/100.)))
             for i in range(pages):
                 data['offset'] = i*100
-                listofgroups.extend([v['attributes']['Name'] for v in self.rest('v2/search/basic', method='get', params=json.dumps(data))
+                listofgroups.extend([v['attributes']['Name'] for v in self.rest('v2/search/basic', method='get', params=json.dumps(data))['entities'])
         for group in groups:
             if group not in listofgroups:
                 data = { "jsonClass": "org.apache.atlas.typesystem.json.InstanceSerialization$_Reference", "id": {
