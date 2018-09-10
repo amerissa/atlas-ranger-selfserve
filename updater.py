@@ -175,7 +175,7 @@ class atlascon(object):
                 logger.info('Group %s has been deleted' % (group))
 
     def readonly(self, response, tag, group):
-        classification = [v['classifications'][0] for v in response if v['displayText'] == group ]
+        classification = [v['ClassificationNames'][0] for v in response if v['displayText'] == group ]
         try:
             attributes = [v['attributes'] for v in classification if v['typeName'] == tag ]
         except:
